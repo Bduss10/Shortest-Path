@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Navigasi Kampus UNIB — Rute Jalan Kaki</title>
+  <meta name="description" content="Sistem navigasi jalan kaki kampus Universitas Bengkulu — Dijkstra + OSRM real-road routing, multi-waypoint, animasi algoritma." />
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ══════════════════════ HEADER ══════════════════════ -->
+  <div id="header">
+    <div class="header-logo">
+      <div class="header-icon"><i data-lucide="footprints" class="lucide-icon"></i></div>
+      <div>
+        <h1>Navigasi Kampus UNIB</h1>
+        <p>Rute Jalan Kaki · Dijkstra · OSRM</p>
+      </div>
+    </div>
+    <span class="badge">
+      <span class="badge-dot"></span>
+      WALKING MODE
+    </span>
+  </div>
+
+  <!-- ══════════════════════ MAIN ══════════════════════ -->
+  <div id="main">
+
+    <!-- ════════ SIDEBAR ════════ -->
+    <div id="sidebar">
+
+      <!-- ① Mode Transportasi -->
+      <div class="panel">
+        <div class="panel-title">Mode Transportasi</div>
+        <div class="transport-row">
+          <button class="btn-transport active-transport" id="t-foot">
+            <span class="t-icon"><i data-lucide="footprints" class="lucide-icon"></i></span>
+            <span class="t-label">Jalan Kaki</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ② Titik Rute -->
+      <div class="panel">
+        <div class="panel-title">Titik Rute</div>
+
+        <!-- Click mode -->
+        <div class="click-mode-row">
+          <button class="btn-mode" id="btn-mode-start" onclick="setClickMode('start')"><i data-lucide="map-pin" class="lucide-icon"></i> Klik Asal</button>
+          <button class="btn-mode" id="btn-mode-end"   onclick="setClickMode('end')"><i data-lucide="target" class="lucide-icon"></i> Klik Tujuan</button>
+        </div>
+
+        <!-- Start -->
+        <div class="point-display" id="disp-start">
+          <div class="pt-label"><i data-lucide="circle-play" class="lucide-icon"></i> Titik Asal</div>
+          <div class="pt-name" id="disp-start-name" style="color:var(--text-muted)">Belum dipilih</div>
+        </div>
+
+        <!-- Waypoints -->
+        <div id="waypoint-list"></div>
+        <button id="btn-add-wp" class="btn-add-wp" onclick="startAddWaypoint()">＋ Tambah Singgahan</button>
+
+        <!-- End -->
+        <div class="point-display" id="disp-end">
+          <div class="pt-label"><i data-lucide="circle-dot" class="lucide-icon"></i> Titik Tujuan</div>
+          <div class="pt-name" id="disp-end-name" style="color:var(--text-muted)">Belum dipilih</div>
+        </div>
+
+        <!-- Divider -->
+        <div class="divider">atau pilih dari daftar</div>
+
+        <div class="panel-title">Titik Asal (Preset)</div>
+        <select id="sel-start"><option value="">— Pilih titik asal —</option></select>
+
+        <div class="panel-title">Titik Tujuan (Preset)</div>
+        <select id="sel-end"><option value="">— Pilih titik tujuan —</option></select>
+
+        <!-- CTA Buttons -->
+        <button id="btn-find"><i data-lucide="search" class="lucide-icon"></i> Cari Rute Jalan Kaki</button>
+        <button id="btn-reset"><i data-lucide="rotate-ccw" class="lucide-icon"></i> Reset Semua</button>
+
+        <!-- Algo info -->
+        <div class="algo-box">
+          <strong style="color:var(--accent)">Dijkstra</strong>
+          <span class="osrm-tag">+ OSRM</span><br>
+          <span style="color:var(--text-muted)">
+            Algoritma Dijkstra menghitung jalur jalan kaki terpendek
+            antar gedung di kampus UNIB. OSRM memetakan rute
+            mengikuti jalur pejalan kaki sesungguhnya.
+            Mendukung <strong style="color:var(--tertiary)">titik singgah</strong>.
+          </span>
+        </div>
+      </div>
+
+      <!-- ③ Visualisasi Dijkstra -->
+      <div class="panel" id="anim-panel">
+        <div class="panel-title">
+          Visualisasi Dijkstra
+          <span class="anim-badge">DEMO AI</span>
+        </div>
+
+        <div id="anim-status" class="anim-status">
+          Pilih dua titik preset berbeda untuk memulai animasi
+        </div>
+
+        <div class="anim-btn-row">
+          <button id="btn-animate" class="btn-anim" onclick="runDijkstraAnimation()" disabled><i data-lucide="play" class="lucide-icon"></i> Mulai Animasi</button>
+          <button id="btn-stop-anim" class="btn-stop-anim" style="display:none" onclick="stopAnimation()"><i data-lucide="square" class="lucide-icon"></i> Stop</button>
+        </div>
+
+        <div class="speed-row">
+          <span class="speed-label">Kecepatan</span>
+          <input type="range" id="anim-speed" class="speed-slider" min="1" max="5" value="3">
+          <span id="speed-val" class="speed-val">Sedang</span>
+        </div>
+
+        <div class="anim-legend">
+          <div class="anim-leg-item"><div class="aleg-dot" style="background:var(--purple)"></div> Node aktif</div>
+          <div class="anim-leg-item"><div class="aleg-dot" style="background:var(--amber)"></div> Ditemukan</div>
+          <div class="anim-leg-item"><div class="aleg-dot" style="background:#475569"></div> Selesai</div>
+          <div class="anim-leg-item"><div class="aleg-dot" style="background:var(--green)"></div> Jalur optimal</div>
+        </div>
+      </div>
+
+      <!-- ④ Hasil Pencarian -->
+      <div id="result-panel">
+        <div class="panel-title">Hasil Pencarian</div>
+        <div id="result-box">
+          <span>Klik peta atau pilih dropdown,<br>lalu klik "Cari Rute Terpendek"</span>
+        </div>
+      </div>
+
+      <!-- ⑤ Riwayat -->
+      <div class="panel" id="history-panel">
+        <div class="panel-title"><i data-lucide="clock" class="lucide-icon"></i> Riwayat Pencarian</div>
+        <div id="history-list"></div>
+      </div>
+
+      <!-- ⑥ Legenda -->
+      <div id="legend">
+        <div class="panel-title">Legenda</div>
+        <div class="legend-grid">
+          <div class="legend-row"><div class="ld" style="background:var(--green)"></div> Titik Asal</div>
+          <div class="legend-row"><div class="ld" style="background:var(--red)"></div> Titik Tujuan</div>
+          <div class="legend-row"><div class="ld" style="background:var(--purple)"></div> Singgahan</div>
+          <div class="legend-row"><div class="ld" style="background:var(--cyan)"></div> Node Kampus</div>
+          <div class="legend-row" style="grid-column:span 2"><div class="le" style="background:var(--cyan);opacity:0.9"></div> Jalur OSRM</div>
+        </div>
+      </div>
+
+    </div><!-- /sidebar -->
+
+    <!-- ════════ MAP ════════ -->
+    <div id="map-wrap">
+      <div id="map"></div>
+      <div id="map-hint"><i data-lucide="map-pin" class="lucide-icon"></i> Tap lokasi di peta untuk menentukan titik awal</div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<script src="script.js"></script>
+<script>
+  // Initialize Lucide icons after DOM is ready
+  document.addEventListener('DOMContentLoaded', function() {
+    lucide.createIcons();
+  });
+</script>
+</body>
+</html>
+=======
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BFS Shortest Path — Universitas Bengkulu</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;
+  --border:#2e3347;--cyan:#00d4ff;--green:#00e57a;
+  --red:#ff4757;--amber:#ffb300;--purple:#7c6af7;
+  --text:#e8eaf0;--muted:#6b7280;--sidebar:290px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+#header{display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:54px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;z-index:1000}
+.hdr-left{display:flex;align-items:center;gap:12px}
+.hdr-logo{width:34px;height:34px;background:linear-gradient(135deg,var(--cyan),var(--purple));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px}
+.hdr-title{font-size:15px;font-weight:700}
+.hdr-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.badge{font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;background:rgba(0,212,255,0.12);color:var(--cyan);border:1px solid rgba(0,212,255,0.3);display:flex;align-items:center;gap:5px}
+.badge-dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+#main{display:flex;flex:1;overflow:hidden}
+#sidebar{width:var(--sidebar);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+#sidebar::-webkit-scrollbar{width:4px}
+#sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.panel{padding:14px 16px;border-bottom:1px solid var(--border)}
+.panel-title{font-size:10px;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
+select{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'Space Grotesk',sans-serif;font-size:12px;padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:8px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+select:focus{outline:none;border-color:var(--cyan)}
+#btn-cari{width:100%;padding:10px;border-radius:8px;border:none;background:var(--cyan);color:#000;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:opacity .2s;margin-bottom:8px}
+#btn-cari:hover{opacity:.85}
+#btn-cari:disabled{opacity:.4;cursor:not-allowed}
+#btn-reset{width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:'Space Grotesk',sans-serif;font-size:12px;cursor:pointer;transition:all .2s}
+#btn-reset:hover{border-color:var(--red);color:var(--red)}
+.point-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border-radius:8px;margin-bottom:6px;border:1px solid var(--border)}
+.point-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.point-label{font-size:11px;color:var(--muted)}
+.point-name{font-size:12px;font-weight:600;color:var(--text);margin-top:1px}
+#result-panel{padding:14px 16px;border-bottom:1px solid var(--border)}
+#result-box{background:var(--surface2);border-radius:8px;padding:12px;font-size:12px;color:var(--muted);min-height:60px;border:1px solid var(--border)}
+.result-found{border-color:rgba(0,229,122,.4)!important}
+.result-stat{display:flex;justify-content:space-between;margin-bottom:8px}
+.stat-item{text-align:center}
+.stat-val{font-size:20px;font-weight:700;color:var(--cyan)}
+.stat-lbl{font-size:10px;color:var(--muted);margin-top:2px}
+.route-path{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--green);line-height:1.7;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);word-break:break-word}
+#anim-panel{padding:14px 16px;border-bottom:1px solid var(--border)}
+.anim-status{font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5}
+.speed-row{display:flex;align-items:center;gap:8px;margin-top:8px}
+.speed-label{font-size:10px;color:var(--muted);white-space:nowrap}
+input[type=range]{flex:1;accent-color:var(--cyan);height:4px;cursor:pointer}
+.speed-val{font-size:10px;color:var(--cyan);min-width:80px;text-align:right}
+.btn-anim{width:100%;padding:8px;border-radius:8px;border:1px solid var(--purple);background:rgba(124,106,247,.12);color:var(--purple);font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .2s}
+.btn-anim:hover{background:rgba(124,106,247,.25)}
+.btn-anim:disabled{opacity:.4;cursor:not-allowed}
+#step-log{font-family:'JetBrains Mono',monospace;font-size:10px;color:#4ade80;max-height:90px;overflow-y:auto;background:#0a0f1e;border-radius:6px;padding:8px;margin-top:8px;border:1px solid var(--border);display:none;line-height:1.6}
+#step-log::-webkit-scrollbar{width:3px}
+#step-log::-webkit-scrollbar-thumb{background:#2e3347}
+#legend{padding:14px 16px}
+.legend-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.legend-row{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.ld{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.le{width:18px;height:4px;border-radius:2px;flex-shrink:0}
+#map-wrap{flex:1;position:relative;overflow:hidden}
+#map{width:100%;height:100%}
+.leaflet-container{font-family:'Space Grotesk',sans-serif;background:#1a1d27}
+.node-marker{width:14px;height:14px;border-radius:50%;border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,.6);cursor:pointer;transition:transform .15s}
+.node-marker:hover{transform:scale(1.5)}
+.leaflet-popup-content-wrapper{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.4);font-family:'Space Grotesk',sans-serif;font-size:12px}
+.leaflet-popup-tip{background:var(--surface)}
+.leaflet-popup-content{margin:10px 14px}
+#map-hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(15,17,23,.85);color:var(--muted);font-size:11px;padding:6px 14px;border-radius:20px;border:1px solid var(--border);pointer-events:none;z-index:1000;white-space:nowrap}
+@keyframes nodePulse{0%{transform:scale(1)}50%{transform:scale(1.8);opacity:.5}100%{transform:scale(1)}}
+.pulse-active{animation:nodePulse .5s ease}
+</style>
+</head>
+<body>
+<div id="header">
+  <div class="hdr-left">
+    <div class="hdr-logo">🗺</div>
+    <div>
+      <div class="hdr-title">BFS Shortest Path — UNIB</div>
+      <div class="hdr-sub">Breadth-First Search · Peta Kampus Universitas Bengkulu</div>
+    </div>
+  </div>
+  <div class="badge"><div class="badge-dot"></div>BFS ALGORITHM</div>
+</div>
+<div id="main">
+  <div id="sidebar">
+    <div class="panel">
+      <div class="panel-title">Titik Rute</div>
+      <div class="point-row">
+        <div class="point-dot" style="background:var(--green)"></div>
+        <div><div class="point-label">Titik Asal</div><div class="point-name" id="disp-start">Belum dipilih</div></div>
+      </div>
+      <div class="point-row">
+        <div class="point-dot" style="background:var(--red)"></div>
+        <div><div class="point-label">Titik Tujuan</div><div class="point-name" id="disp-end">Belum dipilih</div></div>
+      </div>
+      <div style="margin-top:10px">
+        <div class="panel-title">Pilih Asal</div>
+        <select id="sel-start"></select>
+        <div class="panel-title">Pilih Tujuan</div>
+        <select id="sel-end"></select>
+      </div>
+      <button id="btn-cari" onclick="cariJalur()">🔍 Cari Jalur BFS</button>
+      <button id="btn-reset" onclick="resetAll()">↺ Reset</button>
+    </div>
+    <div id="result-panel">
+      <div class="panel-title">Hasil Pencarian</div>
+      <div id="result-box">Pilih asal &amp; tujuan, lalu klik Cari.</div>
+    </div>
+    <div id="anim-panel">
+      <div class="panel-title">Visualisasi BFS</div>
+      <div class="anim-status" id="anim-status">Pilih dua titik untuk mulai animasi BFS.</div>
+      <button class="btn-anim" id="btn-animate" onclick="runBFSAnimation()" disabled>▶ Mulai Animasi</button>
+      <div class="speed-row">
+        <span class="speed-label">Kecepatan</span>
+        <input type="range" id="anim-speed" min="1" max="5" value="3" oninput="updateSpeedLabel()"/>
+        <span class="speed-val" id="speed-val">Sedang</span>
+      </div>
+      <div id="step-log"></div>
+    </div>
+    <div id="legend">
+      <div class="panel-title">Legenda</div>
+      <div class="legend-grid">
+        <div class="legend-row"><div class="ld" style="background:var(--green)"></div>Titik Asal</div>
+        <div class="legend-row"><div class="ld" style="background:var(--red)"></div>Titik Tujuan</div>
+        <div class="legend-row"><div class="ld" style="background:var(--cyan)"></div>Jalur BFS</div>
+        <div class="legend-row"><div class="ld" style="background:var(--amber)"></div>Dikunjungi</div>
+        <div class="legend-row"><div class="ld" style="background:var(--purple)"></div>Node Aktif</div>
+        <div class="legend-row"><div class="ld" style="background:#4b5563"></div>Node Biasa</div>
+        <div class="legend-row" style="grid-column:span 2"><div class="le" style="background:var(--cyan)"></div>Jalur Terpendek</div>
+        <div class="legend-row" style="grid-column:span 2"><div class="le" style="background:#2e3347"></div>Semua Jalan</div>
+      </div>
+    </div>
+  </div>
+  <div id="map-wrap">
+    <div id="map"></div>
+    <div id="map-hint">🗺 Scroll untuk zoom · Drag untuk geser peta · Klik node untuk pilih</div>
+  </div>
+</div>
+
+<script>
+// ================================================================
+// NODE — posisi GPS tepat di persimpangan/gedung nyata UNIB
+// Referensi: google.com/maps/@-3.7588936,102.2721251,17z
+// ================================================================
+const NODES = {
+  "Gerbang Utama":        {lat:-3.76170, lng:102.26185},
+  "Jl. Budi Utomo":       {lat:-3.76000, lng:102.26430},
+  "Dekanat Fak. Pertanian":{lat:-3.75890, lng:102.26540},
+  "Dekanat Fak. Hukum":   {lat:-3.76090, lng:102.26580},
+  "Gedung K UNIB":        {lat:-3.76250, lng:102.26650},
+  "Gedung I UNIB":        {lat:-3.76020, lng:102.26800},
+  "Gedung Unit Layanan":  {lat:-3.75930, lng:102.26880},
+  "Rektorat UNIB":        {lat:-3.75870, lng:102.27020},
+  "Danau UNIB":           {lat:-3.75800, lng:102.27120},
+  "Lab. Agronomi":        {lat:-3.75730, lng:102.27170},
+  "Jur. Tek. Pertanian":  {lat:-3.75790, lng:102.27300},
+  "Perpustakaan UNIB":    {lat:-3.75680, lng:102.27400},
+  "Dekanat FMIPA":        {lat:-3.75620, lng:102.27530},
+  "Gedung Serba Guna":    {lat:-3.75760, lng:102.27560},
+  "Stadion UNIB":         {lat:-3.75650, lng:102.27740},
+  "Masjid Al-Ikhlas":     {lat:-3.75540, lng:102.27840},
+  "Universitas Bengkulu": {lat:-3.75940, lng:102.27190},
+  "Gerbang Belakang":     {lat:-3.75990, lng:102.27480},
+  "Allbaik Chicken UNIB": {lat:-3.75950, lng:102.27570},
+  "Allbaik Chicken Manna":{lat:-3.76080, lng:102.27450},
+  "Jl. WR. Supratman":    {lat:-3.76180, lng:102.27260},
+  "Gedung R UPT Bahasa":  {lat:-3.76040, lng:102.27060},
+  "BUKOMIE":              {lat:-3.76270, lng:102.27100},
+};
+
+// ================================================================
+// ROAD SEGMENTS — setiap edge punya array waypoints (koordinat
+// belokan jalan nyata) sehingga garis mengikuti bentuk jalan
+// ================================================================
+const ROAD_SEGMENTS = {
+  // Format: "A|B": [[lat,lng], [lat,lng], ...]  (titik-titik belokan)
+  // Jika tidak ada belokan, cukup titik awal dan akhir saja
+
+  // === GERBANG → JL. BUDI UTOMO (jalan masuk barat, belok kanan) ===
+  "Gerbang Utama|Jl. Budi Utomo": [
+    [-3.76170, 102.26185],
+    [-3.76060, 102.26195],
+    [-3.76000, 102.26430],
+  ],
+
+  // === JL. BUDI UTOMO → DEKANAT PERTANIAN (lurus ke timur) ===
+  "Jl. Budi Utomo|Dekanat Fak. Pertanian": [
+    [-3.76000, 102.26430],
+    [-3.75950, 102.26430],
+    [-3.75890, 102.26540],
+  ],
+
+  // === JL. BUDI UTOMO → DEKANAT HUKUM (turun ke selatan) ===
+  "Jl. Budi Utomo|Dekanat Fak. Hukum": [
+    [-3.76000, 102.26430],
+    [-3.76090, 102.26430],
+    [-3.76090, 102.26580],
+  ],
+
+  // === DEKANAT HUKUM → GEDUNG K (lurus ke selatan) ===
+  "Dekanat Fak. Hukum|Gedung K UNIB": [
+    [-3.76090, 102.26580],
+    [-3.76180, 102.26580],
+    [-3.76250, 102.26650],
+  ],
+
+  // === DEKANAT HUKUM → GEDUNG I (ke timur) ===
+  "Dekanat Fak. Hukum|Gedung I UNIB": [
+    [-3.76090, 102.26580],
+    [-3.76020, 102.26650],
+    [-3.76020, 102.26800],
+  ],
+
+  // === DEKANAT PERTANIAN → GEDUNG UNIT LAYANAN ===
+  "Dekanat Fak. Pertanian|Gedung Unit Layanan": [
+    [-3.75890, 102.26540],
+    [-3.75890, 102.26700],
+    [-3.75930, 102.26880],
+  ],
+
+  // === DEKANAT PERTANIAN → GEDUNG I ===
+  "Dekanat Fak. Pertanian|Gedung I UNIB": [
+    [-3.75890, 102.26540],
+    [-3.75960, 102.26540],
+    [-3.76020, 102.26700],
+    [-3.76020, 102.26800],
+  ],
+
+  // === GEDUNG I → REKTORAT ===
+  "Gedung I UNIB|Rektorat UNIB": [
+    [-3.76020, 102.26800],
+    [-3.75940, 102.26800],
+    [-3.75870, 102.27020],
+  ],
+
+  // === GEDUNG I → GEDUNG R UPT ===
+  "Gedung I UNIB|Gedung R UPT Bahasa": [
+    [-3.76020, 102.26800],
+    [-3.76040, 102.26930],
+    [-3.76040, 102.27060],
+  ],
+
+  // === GEDUNG UNIT LAYANAN → REKTORAT ===
+  "Gedung Unit Layanan|Rektorat UNIB": [
+    [-3.75930, 102.26880],
+    [-3.75870, 102.26880],
+    [-3.75870, 102.27020],
+  ],
+
+  // === REKTORAT → DANAU UNIB ===
+  "Rektorat UNIB|Danau UNIB": [
+    [-3.75870, 102.27020],
+    [-3.75800, 102.27020],
+    [-3.75800, 102.27120],
+  ],
+
+  // === REKTORAT → UNIVERSITAS BENGKULU ===
+  "Rektorat UNIB|Universitas Bengkulu": [
+    [-3.75870, 102.27020],
+    [-3.75940, 102.27020],
+    [-3.75940, 102.27190],
+  ],
+
+  // === DANAU UNIB → LAB AGRONOMI ===
+  "Danau UNIB|Lab. Agronomi": [
+    [-3.75800, 102.27120],
+    [-3.75730, 102.27120],
+    [-3.75730, 102.27170],
+  ],
+
+  // === DANAU UNIB → JUR. TEK. PERTANIAN (keliling danau) ===
+  "Danau UNIB|Jur. Tek. Pertanian": [
+    [-3.75800, 102.27120],
+    [-3.75820, 102.27220],
+    [-3.75790, 102.27300],
+  ],
+
+  // === LAB. AGRONOMI → JUR. TEK. PERTANIAN ===
+  "Lab. Agronomi|Jur. Tek. Pertanian": [
+    [-3.75730, 102.27170],
+    [-3.75730, 102.27300],
+    [-3.75790, 102.27300],
+  ],
+
+  // === LAB. AGRONOMI → PERPUSTAKAAN ===
+  "Lab. Agronomi|Perpustakaan UNIB": [
+    [-3.75730, 102.27170],
+    [-3.75680, 102.27170],
+    [-3.75680, 102.27400],
+  ],
+
+  // === JUR. TEK. PERTANIAN → PERPUSTAKAAN ===
+  "Jur. Tek. Pertanian|Perpustakaan UNIB": [
+    [-3.75790, 102.27300],
+    [-3.75680, 102.27300],
+    [-3.75680, 102.27400],
+  ],
+
+  // === JUR. TEK. PERTANIAN → GEDUNG SERBA GUNA ===
+  "Jur. Tek. Pertanian|Gedung Serba Guna": [
+    [-3.75790, 102.27300],
+    [-3.75790, 102.27450],
+    [-3.75760, 102.27560],
+  ],
+
+  // === PERPUSTAKAAN → DEKANAT FMIPA ===
+  "Perpustakaan UNIB|Dekanat FMIPA": [
+    [-3.75680, 102.27400],
+    [-3.75620, 102.27400],
+    [-3.75620, 102.27530],
+  ],
+
+  // === DEKANAT FMIPA → GEDUNG SERBA GUNA ===
+  "Dekanat FMIPA|Gedung Serba Guna": [
+    [-3.75620, 102.27530],
+    [-3.75680, 102.27530],
+    [-3.75760, 102.27560],
+  ],
+
+  // === DEKANAT FMIPA → STADION ===
+  "Dekanat FMIPA|Stadion UNIB": [
+    [-3.75620, 102.27530],
+    [-3.75620, 102.27650],
+    [-3.75650, 102.27740],
+  ],
+
+  // === GEDUNG SERBA GUNA → STADION ===
+  "Gedung Serba Guna|Stadion UNIB": [
+    [-3.75760, 102.27560],
+    [-3.75760, 102.27680],
+    [-3.75650, 102.27740],
+  ],
+
+  // === GEDUNG SERBA GUNA → UNIVERSITAS BENGKULU ===
+  "Gedung Serba Guna|Universitas Bengkulu": [
+    [-3.75760, 102.27560],
+    [-3.75860, 102.27560],
+    [-3.75940, 102.27400],
+    [-3.75940, 102.27190],
+  ],
+
+  // === GEDUNG SERBA GUNA → GERBANG BELAKANG ===
+  "Gedung Serba Guna|Gerbang Belakang": [
+    [-3.75760, 102.27560],
+    [-3.75860, 102.27560],
+    [-3.75990, 102.27480],
+  ],
+
+  // === STADION → MASJID AL-IKHLAS ===
+  "Stadion UNIB|Masjid Al-Ikhlas": [
+    [-3.75650, 102.27740],
+    [-3.75540, 102.27740],
+    [-3.75540, 102.27840],
+  ],
+
+  // === STADION → ALLBAIK CHICKEN UNIB ===
+  "Stadion UNIB|Allbaik Chicken UNIB": [
+    [-3.75650, 102.27740],
+    [-3.75800, 102.27740],
+    [-3.75950, 102.27640],
+    [-3.75950, 102.27570],
+  ],
+
+  // === MASJID → ALLBAIK ===
+  "Masjid Al-Ikhlas|Allbaik Chicken UNIB": [
+    [-3.75540, 102.27840],
+    [-3.75800, 102.27840],
+    [-3.75950, 102.27700],
+    [-3.75950, 102.27570],
+  ],
+
+  // === UNIVERSITAS BENGKULU → ALLBAIK CHICKEN UNIB ===
+  "Universitas Bengkulu|Allbaik Chicken UNIB": [
+    [-3.75940, 102.27190],
+    [-3.75940, 102.27400],
+    [-3.75950, 102.27570],
+  ],
+
+  // === UNIVERSITAS BENGKULU → GERBANG BELAKANG ===
+  "Universitas Bengkulu|Gerbang Belakang": [
+    [-3.75940, 102.27190],
+    [-3.75940, 102.27400],
+    [-3.75990, 102.27480],
+  ],
+
+  // === GERBANG BELAKANG → ALLBAIK CHICKEN UNIB ===
+  "Gerbang Belakang|Allbaik Chicken UNIB": [
+    [-3.75990, 102.27480],
+    [-3.75950, 102.27480],
+    [-3.75950, 102.27570],
+  ],
+
+  // === ALLBAIK → ALLBAIK MANNA ===
+  "Allbaik Chicken UNIB|Allbaik Chicken Manna": [
+    [-3.75950, 102.27570],
+    [-3.76000, 102.27570],
+    [-3.76080, 102.27450],
+  ],
+
+  // === ALLBAIK MANNA → JL. WR. SUPRATMAN ===
+  "Allbaik Chicken Manna|Jl. WR. Supratman": [
+    [-3.76080, 102.27450],
+    [-3.76150, 102.27380],
+    [-3.76180, 102.27260],
+  ],
+
+  // === ALLBAIK MANNA → GEDUNG R UPT ===
+  "Allbaik Chicken Manna|Gedung R UPT Bahasa": [
+    [-3.76080, 102.27450],
+    [-3.76080, 102.27280],
+    [-3.76040, 102.27060],
+  ],
+
+  // === JL. WR. SUPRATMAN → GEDUNG R UPT ===
+  "Jl. WR. Supratman|Gedung R UPT Bahasa": [
+    [-3.76180, 102.27260],
+    [-3.76100, 102.27260],
+    [-3.76040, 102.27060],
+  ],
+
+  // === JL. WR. SUPRATMAN → BUKOMIE ===
+  "Jl. WR. Supratman|BUKOMIE": [
+    [-3.76180, 102.27260],
+    [-3.76270, 102.27260],
+    [-3.76270, 102.27100],
+  ],
+
+  // === GEDUNG R UPT → BUKOMIE ===
+  "Gedung R UPT Bahasa|BUKOMIE": [
+    [-3.76040, 102.27060],
+    [-3.76150, 102.27060],
+    [-3.76270, 102.27060],
+    [-3.76270, 102.27100],
+  ],
+
+  // === GEDUNG K → BUKOMIE ===
+  "Gedung K UNIB|BUKOMIE": [
+    [-3.76250, 102.26650],
+    [-3.76270, 102.26650],
+    [-3.76270, 102.27100],
+  ],
+
+  // === UNIVERSITAS BENGKULU → GEDUNG R UPT ===
+  "Universitas Bengkulu|Gedung R UPT Bahasa": [
+    [-3.75940, 102.27190],
+    [-3.75940, 102.27020],
+    [-3.76040, 102.27020],
+    [-3.76040, 102.27060],
+  ],
+};
+
+// Edges (graph adjacency) — diambil dari kunci ROAD_SEGMENTS
+const EDGES = Object.keys(ROAD_SEGMENTS).map(k => k.split('|'));
+
+const GRAPH = {};
+for(const nm of Object.keys(NODES)) GRAPH[nm]=[];
+for(const [a,b] of EDGES){ GRAPH[a].push(b); GRAPH[b].push(a); }
+
+// ================================================================
+// LEAFLET MAP
+// ================================================================
+const map = L.map('map',{center:[-3.7590,102.2710],zoom:17,zoomControl:true});
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+  attribution:'© OpenStreetMap © CARTO',subdomains:'abcd',maxZoom:20
+}).addTo(map);
+
+// ================================================================
+// LAYERS
+// ================================================================
+const markerMap   = {};
+const roadLayerMap= {}; // "A|B" -> [L.polyline, L.polyline]  (shadow+line)
+const pathLayers  = [];
+let animRunning=false, stopAnim=false;
+
+function makeIcon(color, big=false){
+  const s=big?16:13;
+  return L.divIcon({
+    className:'',
+    html:`<div class="node-marker" style="background:${color};width:${s}px;height:${s}px"></div>`,
+    iconSize:[s,s],iconAnchor:[s/2,s/2],
+  });
+}
+
+function getSegmentKey(a,b){
+  if(ROAD_SEGMENTS[a+'|'+b]) return a+'|'+b;
+  if(ROAD_SEGMENTS[b+'|'+a]) return b+'|'+a;
+  return null;
+}
+
+function getWaypoints(a,b){
+  const key=getSegmentKey(a,b);
+  if(!key) return [[NODES[a].lat,NODES[a].lng],[NODES[b].lat,NODES[b].lng]];
+  const pts=ROAD_SEGMENTS[key];
+  // Jika urutan terbalik, balik array
+  if(key===b+'|'+a) return [...pts].reverse();
+  return pts;
+}
+
+function initMap(){
+  // Gambar semua jalan
+  for(const key of Object.keys(ROAD_SEGMENTS)){
+    const pts=ROAD_SEGMENTS[key];
+    const sh=L.polyline(pts,{color:'#1e2535',weight:6,opacity:1}).addTo(map);
+    const ln=L.polyline(pts,{color:'#3a4460',weight:3,opacity:.9}).addTo(map);
+    roadLayerMap[key]={sh,ln,origColor:'#3a4460'};
+  }
+
+  // Nodes
+  for(const [nm,pos] of Object.entries(NODES)){
+    const m=L.marker([pos.lat,pos.lng],{
+      icon:makeIcon('#4b5563'),zIndexOffset:200
+    }).addTo(map);
+    m.bindPopup(`
+      <div style="font-weight:700;font-size:13px;color:#e8eaf0;margin-bottom:6px">${nm}</div>
+      <div style="color:#6b7280;font-size:10px;margin-bottom:8px">📍 ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}</div>
+      <div style="display:flex;gap:6px">
+        <button onclick="setStart('${nm}');map.closePopup()" style="flex:1;padding:5px;background:rgba(0,229,122,.15);color:#00e57a;border:1px solid rgba(0,229,122,.4);border-radius:6px;cursor:pointer;font-size:11px;font-family:inherit;font-weight:600">✓ Asal</button>
+        <button onclick="setEnd('${nm}');map.closePopup()" style="flex:1;padding:5px;background:rgba(255,71,87,.15);color:#ff4757;border:1px solid rgba(255,71,87,.4);border-radius:6px;cursor:pointer;font-size:11px;font-family:inherit;font-weight:600">✓ Tujuan</button>
+      </div>
+    `);
+    // Label tooltip
+    m.bindTooltip(nm,{permanent:true,direction:'top',offset:[0,-8],className:'node-label',opacity:1});
+    markerMap[nm]=m;
+  }
+}
+
+// ================================================================
+// STYLE HELPERS
+// ================================================================
+function resetRoadColors(){
+  for(const [key,{sh,ln}] of Object.entries(roadLayerMap)){
+    sh.setStyle({color:'#1e2535',weight:6,opacity:1});
+    ln.setStyle({color:'#3a4460',weight:3,opacity:.9});
+  }
+}
+
+function highlightRoad(a,b,color,weight=5){
+  const key=getSegmentKey(a,b);
+  if(!key) return;
+  roadLayerMap[key].sh.setStyle({color,weight:weight+4,opacity:.25});
+  roadLayerMap[key].ln.setStyle({color,weight,opacity:1});
+  roadLayerMap[key].ln.bringToFront();
+}
+
+function updateColors(visited=new Set(),jalur=[]){
+  for(const [nm,m] of Object.entries(markerMap)){
+    let color='#4b5563', big=false;
+    if(nm===curStart){color='#00e57a';big=true;}
+    else if(nm===curEnd){color='#ff4757';big=true;}
+    else if(jalur.includes(nm)){color='#00d4ff';big=true;}
+    else if(visited.has(nm)){color='#ffb300';}
+    m.setIcon(makeIcon(color,big));
+    m.setZIndexOffset(big?300:200);
+  }
+}
+
+// ================================================================
+// SELECTS
+// ================================================================
+function populateSelects(){
+  const names=Object.keys(NODES).sort();
+  ['sel-start','sel-end'].forEach((id,i)=>{
+    const sel=document.getElementById(id);
+    sel.innerHTML='<option value="">— Pilih titik —</option>';
+    names.forEach(nm=>{
+      const o=document.createElement('option');
+      o.value=nm;o.textContent=nm;
+      if(i===0&&nm==='Gerbang Utama') o.selected=true;
+      if(i===1&&nm==='Stadion UNIB')  o.selected=true;
+      sel.appendChild(o);
+    });
+    sel.addEventListener('change',()=>{ i===0?setStart(sel.value):setEnd(sel.value); });
+  });
+}
+
+let curStart='Gerbang Utama', curEnd='Stadion UNIB';
+
+function setStart(nm){
+  curStart=nm;
+  document.getElementById('disp-start').textContent=nm||'Belum dipilih';
+  document.getElementById('sel-start').value=nm;
+  updateColors();checkEnable();
+}
+function setEnd(nm){
+  curEnd=nm;
+  document.getElementById('disp-end').textContent=nm||'Belum dipilih';
+  document.getElementById('sel-end').value=nm;
+  updateColors();checkEnable();
+}
+function checkEnable(){
+  const ok=curStart&&curEnd&&curStart!==curEnd;
+  document.getElementById('btn-animate').disabled=!ok;
+  document.getElementById('btn-cari').disabled=!ok;
+}
+
+// ================================================================
+// BFS
+// ================================================================
+function bfs(start,end){
+  if(start===end) return{jalur:[start],urutan:[start],logs:[]};
+  const queue=[[start]],visited=new Set([start]),urutan=[start],logs=[];
+  let step=1;
+  while(queue.length){
+    const path=queue.shift(),curr=path[path.length-1];
+    logs.push(`[${step++}] ${curr}`);
+    if(curr===end) return{jalur:path,urutan,logs};
+    for(const nb of(GRAPH[curr]||[])){
+      if(!visited.has(nb)){
+        visited.add(nb);urutan.push(nb);
+        queue.push([...path,nb]);
+        logs.push(`    → ${nb}`);
+      }
+    }
+  }
+  return{jalur:null,urutan,logs};
+}
+
+// ================================================================
+// CARI JALUR
+// ================================================================
+function cariJalur(){
+  if(!curStart||!curEnd) return;
+  const {jalur,urutan}=bfs(curStart,curEnd);
+  const visited=new Set(urutan);
+  resetRoadColors();
+  updateColors(visited,jalur||[]);
+
+  if(jalur){
+    // Highlight semua jalan yang dilalui
+    for(let i=0;i<jalur.length-1;i++) highlightRoad(jalur[i],jalur[i+1],'#00d4ff',5);
+    document.getElementById('result-box').className='result-found';
+    document.getElementById('result-box').innerHTML=`
+      <div class="result-stat">
+        <div class="stat-item"><div class="stat-val">${jalur.length-1}</div><div class="stat-lbl">Langkah</div></div>
+        <div class="stat-item"><div class="stat-val">${visited.size}</div><div class="stat-lbl">Dikunjungi</div></div>
+        <div class="stat-item"><div class="stat-val">${jalur.length}</div><div class="stat-lbl">Node Jalur</div></div>
+      </div>
+      <div class="route-path">${jalur.join(' →\n')}</div>`;
+    const allPts=[];
+    for(let i=0;i<jalur.length-1;i++) allPts.push(...getWaypoints(jalur[i],jalur[i+1]));
+    map.fitBounds(allPts,{padding:[60,60]});
+  } else {
+    document.getElementById('result-box').className='';
+    document.getElementById('result-box').innerHTML=`<span style="color:var(--red)">❌ Jalur tidak ditemukan!</span>`;
+  }
+}
+
+// ================================================================
+// ANIMASI BFS
+// ================================================================
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function getDelay(){return [800,550,350,200,80][parseInt(document.getElementById('anim-speed').value)-1];}
+
+async function runBFSAnimation(){
+  if(animRunning) return;
+  animRunning=true; stopAnim=false;
+  resetRoadColors(); updateColors();
+  const logEl=document.getElementById('step-log');
+  logEl.style.display='block'; logEl.innerHTML='';
+  document.getElementById('anim-status').textContent=`⏳ BFS: ${curStart} → ${curEnd}`;
+  document.getElementById('result-box').className='';
+  document.getElementById('result-box').innerHTML=`<span style="color:var(--muted)">⏳ Mencari jalur...</span>`;
+
+  const {jalur,urutan,logs}=bfs(curStart,curEnd);
+  const visited=new Set();
+
+  for(let i=0;i<urutan.length;i++){
+    if(stopAnim) break;
+    const nm=urutan[i]; visited.add(nm);
+    // Warna aktif (ungu pulsing)
+    markerMap[nm].setIcon(makeIcon('#7c6af7',true));
+    // Highlight jalan ke node sebelumnya
+    if(i>0){
+      const prev=urutan[i-1];
+      if(GRAPH[prev]&&GRAPH[prev].includes(nm)) highlightRoad(prev,nm,'#ffb30080',3);
+    }
+    await sleep(getDelay()*.4);
+    // Kembalikan ke warna dikunjungi
+    if(nm===curStart) markerMap[nm].setIcon(makeIcon('#00e57a',true));
+    else if(nm===curEnd) markerMap[nm].setIcon(makeIcon('#ff4757',true));
+    else markerMap[nm].setIcon(makeIcon('#ffb300',false));
+    logEl.innerHTML+=`<div>${logs[i*2]||''}</div>`;
+    logEl.scrollTop=logEl.scrollHeight;
+    await sleep(getDelay());
+    if(nm===curEnd) break;
+  }
+
+  if(!stopAnim&&jalur){
+    resetRoadColors();
+    for(let i=0;i<jalur.length-1;i++) highlightRoad(jalur[i],jalur[i+1],'#00d4ff',5);
+    updateColors(visited,jalur);
+    document.getElementById('result-box').className='result-found';
+    document.getElementById('result-box').innerHTML=`
+      <div class="result-stat">
+        <div class="stat-item"><div class="stat-val">${jalur.length-1}</div><div class="stat-lbl">Langkah</div></div>
+        <div class="stat-item"><div class="stat-val">${visited.size}</div><div class="stat-lbl">Dikunjungi</div></div>
+        <div class="stat-item"><div class="stat-val">${jalur.length}</div><div class="stat-lbl">Node Jalur</div></div>
+      </div>
+      <div class="route-path">${jalur.join(' →\n')}</div>`;
+    document.getElementById('anim-status').textContent=`✅ Ditemukan! ${jalur.length-1} langkah.`;
+    const allPts=[];
+    for(let i=0;i<jalur.length-1;i++) allPts.push(...getWaypoints(jalur[i],jalur[i+1]));
+    map.fitBounds(allPts,{padding:[60,60]});
+  } else if(!stopAnim){
+    document.getElementById('anim-status').textContent='❌ Jalur tidak ditemukan.';
+  }
+  animRunning=false;
+}
+
+function updateSpeedLabel(){
+  const v=parseInt(document.getElementById('anim-speed').value);
+  document.getElementById('speed-val').textContent=['Sangat Lambat','Lambat','Sedang','Cepat','Sangat Cepat'][v-1];
+}
+
+function resetAll(){
+  stopAnim=true; animRunning=false;
+  resetRoadColors(); updateColors();
+  document.getElementById('result-box').className='';
+  document.getElementById('result-box').innerHTML='Pilih asal & tujuan, lalu klik Cari.';
+  document.getElementById('anim-status').textContent='Pilih dua titik untuk mulai animasi BFS.';
+  document.getElementById('step-log').style.display='none';
+  document.getElementById('step-log').innerHTML='';
+}
+
+// Label style
+const style=document.createElement('style');
+style.textContent=`.node-label{background:rgba(15,17,23,.82);color:#e8eaf0;padding:2px 7px;border-radius:10px;font-size:10.5px;font-family:'Space Grotesk',sans-serif;font-weight:600;border:1px solid rgba(255,255,255,.08);white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.4)}`;
+document.head.appendChild(style);
+
+// INIT
+populateSelects();
+initMap();
+setStart('Gerbang Utama');
+setEnd('Stadion UNIB');
+</script>
+</body>
+</html>
+
